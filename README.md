@@ -1,32 +1,27 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/NestJS-Study%20Repo-red?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS Study Badge" />
+</p>
+
 <h1 align="center">
-
-🚀 NestJS Study Repo
-
+  📚 NestJS Journey
 </h1>
 
-  
-
 <p align="center">
-
-🧠 <strong>Mastering NestJS</strong> — from the core concepts to clean architecture, testing, and real-world backend patterns.
-
+  <img src="https://nestjs.com/img/logo-small.svg" alt="NestJS Logo" width="60%" />
 </p>
 
-  
-
 <p align="center">
-
-🦄 Built with ❤️ to help you level up your TypeScript + Node backend skills using the <strong><a href="https://nestjs.com/">NestJS</a></strong> framework.
-
+  🚀 Your go-to guide for learning <strong>NestJS</strong> – a progressive Node.js framework for building efficient, scalable, and maintainable server-side applications.
 </p>
 
-  
+---
 
-<p align="center">
+## 📌 About This Repo
 
-<img src="https://nestjs.com/img/logo-small.svg" width="100" alt="NestJS Logo" />
+This repository documents my **NestJS learning journey**, with organized notes, code examples, and project setups via a basic **RESTful API project**, demonstrating the **Contents** section.
 
-</p>
+Whether you're new to backend development or leveling up your TypeScript & Node.js skills, this guide can help you build production-grade NestJS apps with confidence.
+
 
 <p align="center">
 
@@ -46,15 +41,11 @@
 
 # Node Packages
 
-| Name | Purpose |
-
+| Name                     | Purpose                                                                    |
 | ------------------------ | -------------------------------------------------------------------------- |
-
-| @nestjs/common | contains vast majority of functions , classes,etc , that we need from nest |
-
-| @nestjs/platform-express | lets nest use express js from handling http requrests |
-
-| reflect-metadata | helps make decorators work |
+| @nestjs/common           | contains vast majority of functions , classes,etc , that we need from nest |
+| @nestjs/platform-express | lets nest use express js from handling http requrests                      |
+| reflect-metadata         | helps make decorators work                                                 |
 
   
 
@@ -1012,45 +1003,63 @@ export class UsersService {
 - some times we can add some validation inside the dto class , so we must run create first and then save to save data to database
 - we can also just use save to create and save data
 - typeorm hockes also required to use create
-
 ```ts
 import { AfterInsert,AfterRemove,AfterUpdate,Entity , Column , PrimaryGeneratedColumn } from "typeorm";
 
+  
+
 @Entity()
+
 export class User{
 
-  @PrimaryGeneratedColumn()
-  id:number;
+  
 
-  @Column()
-  email:string;
+@PrimaryGeneratedColumn()
 
-    
+id:number;
 
-  @Column()
-  password:string;
+  
 
-    
+@Column()
 
-  @AfterInsert()
-  logInsert(){
-    console.log('Inserted User With id ',this.id);
+email:string;
 
-  }
+  
 
-    
+@Column()
 
-  @AfterUpdate()
-  logUpdate(){
-  console.log('updated use wtih');
-  }
+password:string;
 
-    
+  
 
-  @AfterRemove()
-  logRemove(){
-  console.log('Removed User with id');
-  }
+@AfterInsert()
+
+logInsert(){
+
+console.log('Inserted User With id ',this.id);
+
+}
+
+  
+
+@AfterUpdate()
+
+logUpdate(){
+
+console.log('updated use wtih');
+
+}
+
+  
+
+@AfterRemove()
+
+logRemove(){
+
+console.log('Removed User with id');
+
+}
+
 }
 ```
 ---
