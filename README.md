@@ -350,6 +350,77 @@ export class CatsModule {}
 
 ---
 
+## Entities
+- an entity defines a single kind of resource / thing that we need to store in an application
+- ex: we need to make users login/regiter by thier email & password  , then we need to store data about thouse users , hence we create an entity for user
+- and **Repository** for users to CRUD on the user thing
+![[Pasted image 20250811031607.png]]
+- step 1
+```ts
+import { Entity , Column , PrimaryGeneratedColumn } from "typeorm";
+
+  
+
+@Entity()
+export class User{
+	
+	@PrimaryGeneratedColumn()
+	id:number;
+	
+	@Column()
+	email:string;
+	
+	@Column()
+	password:string;
+
+}
+```
+- step 2
+```ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UsersController } from './users.controller';
+import { UsersService } from './users.service';
+import { User } from './user.entity';
+
+  
+
+@Module({
+	imports:[TypeOrmModule.forFeature([User])], // create repository
+	controllers: [UsersController],
+	providers: [UsersService]
+})
+
+export class UsersModule {}
+```
+- step 3
+```ts
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { UsersModule } from './users/users.module';
+import { ReportsModule } from './reports/reports.module';
+import { User } from './users/user.entity';
+
+  
+
+@Module({
+
+	imports: [TypeOrmModule.forRoot({
+		type:'sqlite',
+		database:'db.sqlite',
+		entities:[User],
+		synchronize: true
+	}),UsersModule, ReportsModule],
+	controllers: [AppController],
+	providers: [AppService],
+
+})
+export class AppModule {}
+```
+
+---
 
 ## Middleware
 
@@ -516,6 +587,28 @@ In both cases, pipes operate on the `arguments` being processed by a [control
 
 Nest comes with a number of built-in pipes that you can use out-of-the-box. You can also build your own custom pipes. In this chapter, we'll introduce the built-in pipes and show how to bind them to route handlers. We'll then examine several custom-built pipes to show how you can build one from scratch.
 
+```ts
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { AppModule } from './app.module';
+
+
+async function bootstrap() {
+	const app = await NestFactory.create(AppModule);
+	app.useGlobalPipes(
+		new ValidationPipe({
+			whitelist:true
+		})
+	
+	)
+	await app.listen(process.env.PORT ?? 3000);
+}
+
+bootstrap();
+```
+
+- the `whitelist: true` setting is telling the pipe to ignore all things sent in the body and accept only the things within the dto
+
   ---
   
 
@@ -535,6 +628,8 @@ Nest comes with a number of built-in pipes that you can use out-of-the-box. You 
   
 
 - In practice, a ==DTO is a simple object that contains data and may have some validation logic==. It defines part or all data of a domain object, but do not have any business login in it. It’s typically used to transfer data between the client and the server, or between different layers of the server-side application. The DTO object is usually created by the server-side code, populated with data from a database or other sources, and then sent to the client. The client-side code can then use the DTO object to display data to the user or to send it back to the server for processing.
+
+---
 
 ## Class-Transformer and Class-validator
 ### 1.Class-Transformer
@@ -832,12 +927,140 @@ If you want, I can **write a small pure JavaScript demo** showing how `Reflect.m
 
 ---
 
-# Messages Project
+# Dependency Injection
+## Nest DI Container
+![[Pasted image 20250810030501.png]]
 
-## Some diagrams
+- at startup , register all classes with the container
+- container will figure out what each dependency each class has
+- we then ask the container to create an instance of a class for us
+- container creates all required dependencies and gives us the instance
+- container will hold onto the created dependency instances and reuse them if needed.
 
-![[Pasted image 20250805122329.png]]![[Pasted image 20250805122417.png]]
+to apply DI we follow 2 steps , nest DI will take care else
+- first: mark classes that are dependecies for other classes with @Ijectable() annotation - **All Dependencies are Singletons by default**
+- second: add them to the modules list of providers
+- 
 
-![[Pasted image 20250805122521.png]]
+## DI Inside of a module
+![[Pasted image 20250810054812.png]]
 
-![[Pasted image 20250805122645.png]]
+## DI between modules
+![[Pasted image 20250810055305.png]]
+
+- `exports` property in `@Module({})` annotation is telling that this modules is exporting his x to other modules
+- `imports` property in `@Module({})` annotation is telling that this module has a relationship with other module (import modules)
+---
+
+# Database Integration (TypeORM)
+![[Pasted image 20250811024643.png]]
+
+- this is a way to creating a database configuration , through the appModule
+- `@nestjs/typeorm` makes typeorm usage easly with nestjs
+```ts
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { UsersModule } from './users/users.module';
+import { ReportsModule } from './reports/reports.module';
+
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+
+@Module({
+	imports: [TypeOrmModule.forRoot({
+		type:'sqlite',
+		database:'db.sqlite',
+		entities:[],
+		synchronize: true
+	}),UsersModule, ReportsModule],
+	controllers: [AppController],
+	providers: [AppService],
+})
+
+export class AppModule {}
+```
+
+- we import it in out appModule , and setup the configurations
+#### Migration
+- Changes the structure of the database (add column , remove column , change types ....etc)
+![[Pasted image 20250811033327.png]]
+- `syncronize: true` setting is telling typeorm to automatically look for my entities and do migrations, **Used Only in development environments**
+- class name = 'user' , table name = 'users'
+
+#### TypeOrm Builtin Repositories
+```ts
+import { Injectable } from '@nestjs/common';
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { User } from './user.entity';
+
+  
+
+@Injectable()
+
+export class UsersService {
+	constructor(@InjectRepository(User) private repo:Repository<User>){}
+}
+```
+- lots of things going here :_
+- well we have discussed the DI system in nestjs , well things are little more different in case of **Generic classes**
+- nest's DI system doesn't work with Generics , so we add the `@IjectRepository(User)` to tell nest like hey deal with this as a normal class and inject it .
+
+#### Create Vs Save in Repository APIs
+![[Pasted image 20250812022205.png]]
+- some times we can add some validation inside the dto class , so we must run create first and then save to save data to database
+- we can also just use save to create and save data
+- typeorm hockes also required to use create
+
+```ts
+import { AfterInsert,AfterRemove,AfterUpdate,Entity , Column , PrimaryGeneratedColumn } from "typeorm";
+
+@Entity()
+export class User{
+
+  @PrimaryGeneratedColumn()
+  id:number;
+
+  @Column()
+  email:string;
+
+    
+
+  @Column()
+  password:string;
+
+    
+
+  @AfterInsert()
+  logInsert(){
+    console.log('Inserted User With id ',this.id);
+
+  }
+
+    
+
+  @AfterUpdate()
+  logUpdate(){
+  console.log('updated use wtih');
+  }
+
+    
+
+  @AfterRemove()
+  logRemove(){
+  console.log('Removed User with id');
+  }
+}
+```
+---
+
+# Notes
+- while testing it's not good practice to use anything that is trying to read / write from disk as it's resource intensive
+
+---
+# Projects
+# 1
+![[Pasted image 20250811022325.png]]
+![[Pasted image 20250811022501.png]]
+![[Pasted image 20250811022733.png]]

@@ -18,8 +18,8 @@ const create_message_dto_1 = require("./dtos/create-message.dto");
 const messages_service_1 = require("./messages.service");
 let MessagesController = class MessagesController {
     messageService;
-    constructor() {
-        this.messageService = new messages_service_1.MessagesService();
+    constructor(messageService) {
+        this.messageService = messageService;
     }
     listMessages() {
         return this.messageService.findAll();
@@ -27,8 +27,11 @@ let MessagesController = class MessagesController {
     createMessage(body) {
         return this.messageService.create(body.content);
     }
-    getMessage(id) {
-        return this.messageService.fincOne(id);
+    async getMessage(id) {
+        const message = await this.messageService.fincOne(id);
+        if (!message)
+            throw new common_1.NotFoundException('Message not found');
+        return message;
     }
 };
 exports.MessagesController = MessagesController;
@@ -50,10 +53,10 @@ __decorate([
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], MessagesController.prototype, "getMessage", null);
 exports.MessagesController = MessagesController = __decorate([
     (0, common_1.Controller)('/messages'),
-    __metadata("design:paramtypes", [])
+    __metadata("design:paramtypes", [messages_service_1.MessagesService])
 ], MessagesController);
 //# sourceMappingURL=messages.controller.js.map
