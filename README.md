@@ -401,23 +401,323 @@ is a typical `request-response`  of how users or clients interact with a serve
 
 ### What’s the difference between Interceptor vs Middleware vs Filter
 
-> \*\*Interceptors
+\*\*Interceptors
 
 > \*\*Interceptors have access to response/request before *and* after the route handler is called.
 
->
-
-> \*\*Middleware
+\*\*Middleware
 
 > \*\*Middleware is called only before the route handler is called
 
->
-
-> \*\*Exception Filters
+\*\*Exception Filters
 
 > \*\*Exception Filters are called after the route handler and after the interceptors
 
 In the interceptor, we can do any processes and modify the request before it’s sent to the server. We can also set up the interceptor to intercept the response before being sent back to the client.
+
+### Example
+
+- as an example on interceptors , imagine we have setup a user CRUD , the read service returns the user's data , we need to filter out some properties? (ie.user password)
+
+- nest's docs recommends to follow an approach , which have some downsides , we will discuss it later , this is the approach
+  ![[Pasted image 20250815120235.png]]
+
+```ts
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Param,
+  Query,
+  Delete,
+  NotFoundException,
+  UseInterceptors,
+  ClassSerializerInterceptor,
+} from "@nestjs/common";
+import { CreateUserDTO } from "./dtos/createuser.dto";
+import { UsersService } from "./users.service";
+import { UpdateUserDto } from "./dtos/update-user.dto";
+
+@Controller("auth")
+export class UsersController {
+  constructor(private readonly userSerivce: UsersService) {}
+
+  @Post("/signup")
+  CreateUser(@Body() data: CreateUserDTO) {
+    return this.userSerivce.create(data.email, data.password);
+  }
+
+  @UseInterceptors(ClassSerializerInterceptor)
+  @Get("/:id")
+  async findUser(@Param("id") id: string) {
+    const user = await this.userSerivce.findOne(+id);
+    if (!user) {
+      throw new NotFoundException("User Not Found");
+    }
+    return user;
+  }
+
+  @Get()
+  findAllUsers(@Query("email") email: string) {
+    return this.userSerivce.find(email);
+  }
+
+  @Patch("/:id")
+  updateUser(@Param("id") id: string, @Body() body: UpdateUserDto) {
+    return this.userSerivce.update(+id, body);
+  }
+
+  @Delete("/:id")
+  removeUser(@Param("id") id: string) {
+    return this.userSerivce.remove(+id);
+  }
+}
+```
+
+and this is the entity
+
+```ts
+import {
+  AfterInsert,
+  AfterRemove,
+  AfterUpdate,
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+} from "typeorm";
+import { Exclude } from "class-transformer";
+
+@Entity()
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  email: string;
+
+  @Column()
+  @Exclude()
+  password: string;
+
+  @AfterInsert()
+  logInsert() {
+    console.log("Inserted User With id ", this.id);
+  }
+
+  @AfterUpdate()
+  logUpdate() {
+    console.log("updated use wtih");
+  }
+
+  @AfterRemove()
+  logRemove() {
+    console.log("Removed User with id");
+  }
+}
+```
+
+- we applied `@Exclude()` from 'class-transformer' package to mark the password field as execluded from read
+- then in the controller , we imported 2 things , first `useInterceptors`
+
+#### Downsides
+
+![[Pasted image 20250815121213.png]]
+
+- imagine an admin that uses the same service to get his own copy of user's data , and a public endpoints that get it's own copy of the data , now based on the solution that we built what could the user entity instance carry?
+
+- the answer is **nothing** here we tied up the view rules to the entity instance this is not a good separation of concerns , what we should really do is the following
+  ![[Pasted image 20250815121930.png]]
+- we will return the user entity , without modifying it , then impelemnt a custom interceptor , that uses a DTO (Data Transfer Object) that describes how to serialize the user for this route handler , remember DTO is used to transfere data between different places in out application (not only used for incoming data , but also used in other langs / frameworks to handle the format of outgoing data as well)
+
+## How To Create An Interceptor ?
+
+- when we create an interceptor whe can apply it to a particular route (what we did ) , or to the whole controller , or globally
+
+- when we create an interceptor we must override a method called `intercept`
+  ![[Pasted image 20250815122758.png]]
+
+```ts
+import { NestInterceptor, CallHandler, ExecutionContext } from "@nestjs/common";
+
+import { Observable } from "rxjs";
+import { map } from "rxjs/operators";
+import { plainToClass } from "class-transformer";
+
+export class SerializeInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, handler: CallHandler): Observable<any> {
+    // run something before a request is handede by the request handler (middleware)
+    console.log("Iam running before the hander ", context);
+
+    return handler.handle().pipe(
+      map((data: any) => {
+        // run something bwfore a response is sent out
+        console.log("Iam running bwfore response is sent out", data);
+      })
+    );
+  }
+}
+```
+
+#### 1. Imports
+
+- **`NestInterceptor`** → Interface that your interceptor must implement.
+- **`ExecutionContext`** → Gives you access to things like `req`, `res`, the controller, handler metadata, etc.
+- **`CallHandler`** → Represents the actual method in the controller that will be called.
+- **`rxjs` + `map()`** → Used to intercept and transform the data stream coming _out_ of the controller.
+- **`plainToClass`** → Converts raw JavaScript objects into class instances (useful for serialization).
+
+#### 2.first part
+
+```ts
+export class SerializeInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, handler: CallHandler): Observable<any> {
+    // run something before a request is handede by the request handler (middleware)
+    console.log('Iam running before the hander ', context);
+
+```
+
+**`intercept`** runs **before the controller’s method is called**.  
+At this point:
+
+- The request has been received.
+- You can inspect/modify the request here if you want.
+- You have **not** yet hit the controller method.
+
+#### 3.second part
+
+```ts
+    return handler.handle().pipe(
+      map((data: any) => {
+        // run something before a response is sent out
+        console.log('Iam running before response is sent out', data);
+      }),
+    );
+  }
+}
+```
+
+- **`handler.handle()`** → This actually executes the controller’s method and returns its result **as an Observable**.
+- **`.pipe(map(...))`** → Here you can **transform or replace** the controller’s returned data before sending it back to the client.
+  - In your case, you’re only logging, but you could:
+    - Filter out sensitive fields (password, tokens, etc.).
+    - Transform database objects into DTOs.
+    - Add extra metadata to the response.
+
+### Now With example
+
+![[Pasted image 20250816235712.png]]
+
+- now we want to achive this , to do so , we need to create a new DTO to filter the data we want to return
+
+```ts
+import { Expose } from "class-transformer";
+
+export class UserDTO {
+  @Expose()
+  id: number;
+
+  @Expose()
+  email: string;
+}
+```
+
+- `Expose()` tells dto that the comming data we want to just expose the id , email
+- now update the interceptor logic that sends data to client
+
+```ts
+import { NestInterceptor, CallHandler, ExecutionContext } from "@nestjs/common";
+import { Observable } from "rxjs";
+import { map } from "rxjs/operators";
+import { plainToClass } from "class-transformer";
+import { UserDTO } from "src/users/dtos/user.dto";
+
+export class SerializeInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, handler: CallHandler): Observable<any> {
+    // run something before a request is handede by the request handler (middleware)
+    console.log("Iam running before the hander ", context);
+
+    return handler.handle().pipe(
+      map((data: any) => {
+        // run something bwfore a response is sent out
+        console.log("Iam running bwfore response is sent out", data);
+        return plainToClass(UserDTO, data, {
+          excludeExtraneousValues: true, // this will ensure that only the properties decorated with @Expose() are included in the serialized output
+        });
+      })
+    );
+  }
+}
+```
+
+- `plainToClass` takes a **plain JavaScript object** (like one you get from your DB, or a raw JSON) and turns it into an **instance of a class** (like your `UserDTO`).
+
+- aight this is cool , but we can use that SerializeInterptor to more than one case write , it only depeneds on the dto we are passing to it
+- so we could inject that dto in the constructor of the class
+
+```ts
+import { NestInterceptor, CallHandler, ExecutionContext } from "@nestjs/common";
+import { Observable } from "rxjs";
+import { map } from "rxjs/operators";
+import { plainToClass } from "class-transformer";
+import { UserDTO } from "src/users/dtos/user.dto";
+
+export class SerializeInterceptor implements NestInterceptor {
+  constructor(private readonly dto: any) {}
+
+  intercept(context: ExecutionContext, handler: CallHandler): Observable<any> {
+    // run something before a request is handede by the request handler (middleware)
+    console.log("Iam running before the hander ", context);
+
+    return handler.handle().pipe(
+      map((data: any) => {
+        // run something bwfore a response is sent out
+        console.log("Iam running bwfore response is sent out", data);
+        return plainToClass(UserDTO, data, {
+          excludeExtraneousValues: true, // this will ensure that only the properties decorated with @Expose() are included in the serialized output
+        });
+      })
+    );
+  }
+}
+```
+
+- now this Interceotor will work with any kind of DTO we pass in , userDTO , MessageDTO .... etc
+- we use it like this `  @UseInterceptors(new SerializeInterceptor(UserDTO))`
+
+- that's cool , but we could make this better by applying it to a custom decorator
+
+```ts
+import { UseInterceptors } from "@nestjs/common";
+import { ClassConstructor } from "class-transformer";
+import { SerializeInterceptor } from "src/interceptors/serialize.interceptor";
+
+export function Serialize(dto: ClassConstructor<any>) {
+  return UseInterceptors(new SerializeInterceptor(dto));
+}
+```
+
+- this decorator will be used to auto useInterceptor with the SeruakuzeInterceptor DTO
+- that ClassConstructor interface is a typescript trick to make it more type-safelly
+
+```ts
+interface ClassConstructor<T> {
+  new (...args: any[]): T;
+}
+```
+
+- In TypeScript, an `interface` can describe not just objects, but also _callable_ or _constructable_ types.
+- `new (...args: any[]): T` means:
+      > "This is a type that can be instantiated with `new`, with any number of arguments, and the result is some object."
+  `plainToInstance` requires a **class constructor** as its first argument:
+
+`plainToInstance(this.dto, data, { excludeExtraneousValues: true });`
+
+If you didn’t add the `ClassConstructor` interface, TypeScript would just see `dto: any`, meaning you could accidentally pass in something that isn’t a class, and `plainToInstance` would break at runtime.
+
+This gives **type safety**: only proper classes (with a `new` signature) are allowed.
 
 ---
 
